@@ -52,6 +52,8 @@ struct etherswitch_info {
 	int		es_nlaggroups;
 	char		es_name[ETHERSWITCH_NAMEMAX];
 	uint32_t	es_vlan_caps;
+	uint32_t	es_switch_caps;
+	uint32_t	es_ports_mask[MAX_PORTS_UINT32];
 };
 typedef struct etherswitch_info etherswitch_info_t;
 
