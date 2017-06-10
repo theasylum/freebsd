@@ -813,7 +813,7 @@ mvneta_attach(device_t self)
 				mvneta_detach(self);
 				return (ENXIO);
 			}
-			ifm_target |= IFM_2500_T;
+			ifm_target |= IFM_2500_KX;	/* IFM_2500_T */
 			break;
 		case 1000:
 			ifm_target |= IFM_1000_T;
@@ -2093,6 +2093,7 @@ mvneta_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	struct ifreq *ifr;
 	int error, mask;
 	uint32_t flags;
+	char *mediatype;
 	int q;
 
 	error = 0;
@@ -2153,7 +2154,8 @@ mvneta_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	case SIOCSIFMEDIA:
 		if ((IFM_SUBTYPE(ifr->ifr_media) == IFM_1000_T ||
-		    IFM_SUBTYPE(ifr->ifr_media) == IFM_2500_T) &&
+		    IFM_SUBTYPE(ifr->ifr_media) == IFM_2500_T ||
+		    IFM_SUBTYPE(ifr->ifr_media) == IFM_2500_KX) &&
 		    (ifr->ifr_media & IFM_FDX) == 0) {
 			if (IFM_SUBTYPE(ifr->ifr_media) == IFM_1000_T)
 				mediatype = "1000Base-T";
@@ -2162,10 +2164,7 @@ mvneta_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			else if (IFM_SUBTYPE(ifr->ifr_media) == IFM_2500_KX)
 				mediatype = "2500Base-KX";
 			device_printf(sc->dev,
-			    "%s half-duplex unsupported\n",
-			    IFM_SUBTYPE(ifr->ifr_media) == IFM_1000_T ?
-			    "1000Base-T" :
-			    "2500Base-T");
+			    "%s half-duplex unsupported\n", mediatype);
 			error = EINVAL;
 			break;
 		}
@@ -2469,8 +2468,9 @@ mvneta_update_autoneg(struct mvneta_softc *sc, int enable)
 STATIC int
 mvneta_update_media(struct mvneta_softc *sc, int media)
 {
-	int reg, err;
 	boolean_t autoneg, running;
+	char *type;
+	int reg, err;
 
 	err = 0;
 
@@ -2496,13 +2496,17 @@ mvneta_update_media(struct mvneta_softc *sc, int media)
 		    MVNETA_PANC_SETMIISPEED |
 		    MVNETA_PANC_SETFULLDX);
 		if (IFM_SUBTYPE(media) == IFM_1000_T ||
-		    IFM_SUBTYPE(media) == IFM_2500_T) {
+		    IFM_SUBTYPE(media) == IFM_2500_T ||
+		    IFM_SUBTYPE(media) == IFM_2500_KX) {
 			if ((media & IFM_FDX) == 0) {
+				if (IFM_SUBTYPE(media) == IFM_1000_T)
+					type = "1000Base-T";
+				else if (IFM_SUBTYPE(media) == IFM_2500_T)
+					type = "2500Base-T";
+				else if (IFM_SUBTYPE(media) == IFM_2500_KX)
+					type = "2500Base-KX";
 				device_printf(sc->dev,
-				    "%s half-duplex unsupported\n",
-				    IFM_SUBTYPE(media) == IFM_1000_T ?
-				    "1000Base-T" :
-				    "2500Base-T");
+				    "%s half-duplex unsupported\n", type);
 				err = EINVAL;
 				goto out;
 			}
@@ -2552,7 +2556,8 @@ mvneta_adjust_link(struct mvneta_softc *sc)
 		    MVNETA_PANC_SETMIISPEED |
 		    MVNETA_PANC_SETFULLDX);
 		if (IFM_SUBTYPE(sc->mvneta_media) == IFM_1000_T ||
-		    IFM_SUBTYPE(sc->mvneta_media) == IFM_2500_T) {
+		    IFM_SUBTYPE(sc->mvneta_media) == IFM_2500_T ||
+		    IFM_SUBTYPE(sc->mvneta_media) == IFM_2500_KX) {
 			reg |= MVNETA_PANC_SETGMIISPEED;
 		} else if (IFM_SUBTYPE(sc->mvneta_media) == IFM_100_TX)
 			reg |= MVNETA_PANC_SETMIISPEED;
