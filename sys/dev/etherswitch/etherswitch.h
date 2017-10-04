@@ -37,9 +37,18 @@ typedef struct etherswitch_phyreg etherswitch_phyreg_t;
 #define	ETHERSWITCH_VLAN_CAPS_BITS	\
 "\020\1ISL\2PORT\3DOT1Q\4DOT1Q4K\5QinQ"
 
+#define	ETHERSWITCH_CAPS_PORTS_MASK	(1 << 0)	/* Ports mask */
+#define	ETHERSWITCH_CAPS_LAGG		(1 << 1)	/* LAGG support */
+#define	ETHERSWITCH_CAPS_BITS		\
+"\020\1PORTSMASK\2LAGG"
+
+#define	MAX_PORTS			1024
+#define	MAX_PORTS_UINT32		(MAX_PORTS / sizeof(uint32_t))
+
 struct etherswitch_info {
 	int		es_nports;
 	int		es_nvlangroups;
+	int		es_nlaggroups;
 	char		es_name[ETHERSWITCH_NAMEMAX];
 	uint32_t	es_vlan_caps;
 };
@@ -93,6 +102,14 @@ struct etherswitch_port {
 };
 typedef struct etherswitch_port etherswitch_port_t;
 
+struct etherswitch_laggroup {
+	int		es_lag_valid;
+	int		es_laggroup;
+	int		es_member_ports;
+	int		es_untagged_ports;
+};
+typedef struct etherswitch_laggroup etherswitch_laggroup_t;
+
 struct etherswitch_vlangroup {
 	int		es_vlangroup;
 	int		es_vid;
@@ -142,5 +159,7 @@ typedef struct etherswitch_atu_flush_macentry etherswitch_atu_flush_macentry_t;
 #define IOETHERSWITCHFLUSHMAC		_IOW('i', 14, etherswitch_atu_flush_macentry_t)
 #define IOETHERSWITCHGETTABLE		_IOWR('i', 15, etherswitch_atu_table_t)
 #define IOETHERSWITCHGETTABLEENTRY	_IOWR('i', 16, etherswitch_atu_entry_t)
+#define	IOETHERSWITCHGETLAGGROUP	_IOWR('i', 17, etherswitch_laggroup_t)
+#define	IOETHERSWITCHSETLAGGROUP	_IOW('i', 18, etherswitch_laggroup_t)
 
 #endif
