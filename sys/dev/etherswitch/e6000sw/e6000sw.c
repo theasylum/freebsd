@@ -67,6 +67,14 @@ MALLOC_DEFINE(M_E6000SW, "e6000sw", "e6000sw switch");
 #define	E6000SW_UNLOCK(_sc)		sx_unlock(&(_sc)->sx)
 #define	E6000SW_LOCK_ASSERT(_sc, _what)	sx_assert(&(_sc)->sx, (_what))
 #define	E6000SW_TRYLOCK(_sc)		sx_tryxlock(&(_sc)->sx)
+#define	E6000SW_WAITREADY(_sc, _reg, _bit)				\
+	e6000sw_waitready((_sc), REG_GLOBAL, (_reg), (_bit))
+#define	E6000SW_WAITREADY2(_sc, _reg, _bit)				\
+	e6000sw_waitready((_sc), REG_GLOBAL2, (_reg), (_bit))
+#define	MDIO_READ(dev, addr, reg)					\
+	MDIO_READREG(device_get_parent(dev), (addr), (reg))
+#define	MDIO_WRITE(dev, addr, reg, val)					\
+	MDIO_WRITEREG(device_get_parent(dev), (addr), (reg), (val))
 
 typedef struct e6000sw_softc {
 	device_t		dev;
@@ -139,7 +147,7 @@ static int e6000sw_atu_mac_table(device_t, e6000sw_softc_t *, struct atu_opt *,
     int);
 static int e6000sw_vtu_flush(e6000sw_softc_t *);
 static int e6000sw_vtu_update(e6000sw_softc_t *, int, int, int, int, int);
-static int e6000sw_waitready(e6000sw_softc_t *, uint32_t, uint32_t);
+static int e6000sw_waitready(e6000sw_softc_t *, uint32_t, uint32_t, uint32_t);
 static void e6000sw_get_pvid(e6000sw_softc_t *, int, int *);
 static void e6000sw_set_pvid(e6000sw_softc_t *, int, int);
 static __inline bool e6000sw_is_cpuport(e6000sw_softc_t *, int);
@@ -199,11 +207,6 @@ MODULE_DEPEND(e6000sw, mdio, 1, 1, 1);
 #define	SMI_CMD_OP_WRITE	((1 << 10) | SMI_CMD_BUSY | (1 << 12))
 #define	SMI_DATA		1
 
-#define	MDIO_READ(dev, addr, reg)					\
-	MDIO_READREG(device_get_parent(dev), (addr), (reg))
-#define	MDIO_WRITE(dev, addr, reg, val)					\
-	MDIO_WRITEREG(device_get_parent(dev), (addr), (reg), (val))
-
 #undef E6000SW_DEBUG
 #if defined(E6000SW_DEBUG)
 static void
@@ -211,7 +214,7 @@ e6000sw_atu_dump(e6000sw_softc_t *sc, int fid)
 {
 	uint16_t data, mac1, mac2, mac3, reg;
 
-	if (e6000sw_waitready(sc, ATU_OPERATION, ATU_UNIT_BUSY)) {
+	if (E6000SW_WAITREADY(sc, ATU_OPERATION, ATU_UNIT_BUSY)) {
 		device_printf(sc->dev, "ATU unit is busy, cannot access\n");
 		return;
 	}
@@ -232,7 +235,7 @@ e6000sw_atu_dump(e6000sw_softc_t *sc, int fid)
 		}
 		e6000sw_writereg(sc, REG_GLOBAL, ATU_OPERATION,
 		    reg | ATU_UNIT_BUSY);
-		if (e6000sw_waitready(sc, ATU_OPERATION, ATU_UNIT_BUSY)) {
+		if (E6000SW_WAITREADY(sc, ATU_OPERATION, ATU_UNIT_BUSY)) {
 			device_printf(sc->dev, "Timeout while reading\n");
 			return;
 		}
@@ -267,7 +270,7 @@ e6000sw_vtu_dump(e6000sw_softc_t *sc)
 	int i, port, vlan;
 	uint32_t reg;
 
-	if (e6000sw_waitready(sc, VTU_OPERATION, VTU_BUSY)) {
+	if (E6000SW_WAITREADY(sc, VTU_OPERATION, VTU_BUSY)) {
 		device_printf(sc->dev, "VTU unit is busy, cannot access\n");
 		return;
 	}
@@ -283,7 +286,7 @@ e6000sw_vtu_dump(e6000sw_softc_t *sc)
 			return;
 		}
 		e6000sw_writereg(sc, REG_GLOBAL, VTU_OPERATION, reg | VTU_BUSY);
-		if (e6000sw_waitready(sc, VTU_OPERATION, VTU_BUSY)) {
+		if (E6000SW_WAITREADY(sc, VTU_OPERATION, VTU_BUSY)) {
 			device_printf(sc->dev, "Timeout while reading\n");
 			return;
 		}
@@ -387,6 +390,9 @@ e6000sw_probe(device_t dev)
 	if (sc->sw_addr != 0)
 		sc->multi_chip = true;
 #endif
+
+	if (sc->sw_addr < 0 || sc->sw_addr > 32)
+		return (ENXIO);
 
 	/* Set defaults for 88E6XXX family. */
 	sc->port_vlan_mask = 0x7f;
@@ -627,7 +633,8 @@ e6000sw_attach(device_t dev)
 	sc = device_get_softc(dev);
 
 	if (sc->multi_chip)
-		device_printf(dev, "multi-chip addressing mode\n");
+		device_printf(dev, "multi-chip addressing mode (%#x)\n",
+		    sc->sw_addr);
 	else
 		device_printf(dev, "single-chip addressing mode\n");
 
@@ -1362,7 +1369,7 @@ e6000sw_get_dot1q_vlan(e6000sw_softc_t *sc, etherswitch_vlangroup_t *vg)
 	if (vg->es_vid == 0)
 		return (0);
 
-	if (e6000sw_waitready(sc, VTU_OPERATION, VTU_BUSY)) {
+	if (E6000SW_WAITREADY(sc, VTU_OPERATION, VTU_BUSY)) {
 		device_printf(sc->dev, "VTU unit is busy, cannot access\n");
 		return (EBUSY);
 	}
@@ -1373,7 +1380,7 @@ e6000sw_get_dot1q_vlan(e6000sw_softc_t *sc, etherswitch_vlangroup_t *vg)
 	reg &= ~VTU_OP_MASK;
 	reg |= VTU_GET_NEXT | VTU_BUSY;
 	e6000sw_writereg(sc, REG_GLOBAL, VTU_OPERATION, reg);
-	if (e6000sw_waitready(sc, VTU_OPERATION, VTU_BUSY)) {
+	if (E6000SW_WAITREADY(sc, VTU_OPERATION, VTU_BUSY)) {
 		device_printf(sc->dev, "Timeout while reading\n");
 		return (EBUSY);
 	}
@@ -1710,7 +1717,7 @@ e6000sw_atu_mac_table(device_t dev, e6000sw_softc_t *sc, struct atu_opt *atu,
 		return (EINVAL);
 	}
 
-	if (e6000sw_waitready(sc, ATU_OPERATION, ATU_UNIT_BUSY)) {
+	if (E6000SW_WAITREADY(sc, ATU_OPERATION, ATU_UNIT_BUSY)) {
 		device_printf(dev, "ATU unit is busy, cannot access\n");
 		return (EBUSY);
 	}
@@ -1729,7 +1736,7 @@ e6000sw_atu_mac_table(device_t dev, e6000sw_softc_t *sc, struct atu_opt *atu,
 	e6000sw_writereg(sc, REG_GLOBAL, ATU_OPERATION,
 	    (ret_opt | ATU_UNIT_BUSY | flag));
 
-	if (e6000sw_waitready(sc, ATU_OPERATION, ATU_UNIT_BUSY))
+	if (E6000SW_WAITREADY(sc, ATU_OPERATION, ATU_UNIT_BUSY))
 		device_printf(dev, "Timeout while waiting ATU\n");
 	else if (flag & GET_NEXT_IN_FIB) {
 		atu->mac_01 = e6000sw_readreg(sc, REG_GLOBAL,
@@ -1751,26 +1758,27 @@ e6000sw_atu_flush(device_t dev, e6000sw_softc_t *sc, int flag)
 	if (flag == NO_OPERATION)
 		return (0);
 
-	if (e6000sw_waitready(sc, ATU_OPERATION, ATU_UNIT_BUSY)) {
+	if (E6000SW_WAITREADY(sc, ATU_OPERATION, ATU_UNIT_BUSY)) {
 		device_printf(dev, "ATU unit is busy, cannot access\n");
 		return (EBUSY);
 	}
 	ret = e6000sw_readreg(sc, REG_GLOBAL, ATU_OPERATION);
 	e6000sw_writereg(sc, REG_GLOBAL, ATU_OPERATION,
 	    (ret | ATU_UNIT_BUSY | flag));
-	if (e6000sw_waitready(sc, ATU_OPERATION, ATU_UNIT_BUSY))
+	if (E6000SW_WAITREADY(sc, ATU_OPERATION, ATU_UNIT_BUSY))
 		device_printf(dev, "Timeout while flushing ATU\n");
 
 	return (0);
 }
 
 static int
-e6000sw_waitready(e6000sw_softc_t *sc, uint32_t reg, uint32_t cmdbusy)
+e6000sw_waitready(e6000sw_softc_t *sc, uint32_t phy, uint32_t reg,
+    uint32_t busybit)
 {
 	int i;
 
 	for (i = 0; i < E6000SW_RETRIES; i++) {
-		if ((e6000sw_readreg(sc, REG_GLOBAL, reg) & cmdbusy) == 0)
+		if ((e6000sw_readreg(sc, phy, reg) & busybit) == 0)
 			return (0);
 		DELAY(1);
 	}
@@ -1782,13 +1790,13 @@ static int
 e6000sw_vtu_flush(e6000sw_softc_t *sc)
 {
 
-	if (e6000sw_waitready(sc, VTU_OPERATION, VTU_BUSY)) {
+	if (E6000SW_WAITREADY(sc, VTU_OPERATION, VTU_BUSY)) {
 		device_printf(sc->dev, "VTU unit is busy, cannot access\n");
 		return (EBUSY);
 	}
 
 	e6000sw_writereg(sc, REG_GLOBAL, VTU_OPERATION, VTU_FLUSH | VTU_BUSY);
-	if (e6000sw_waitready(sc, VTU_OPERATION, VTU_BUSY)) {
+	if (E6000SW_WAITREADY(sc, VTU_OPERATION, VTU_BUSY)) {
 		device_printf(sc->dev, "Timeout while flushing VTU\n");
 		return (ETIMEDOUT);
 	}
@@ -1803,7 +1811,7 @@ e6000sw_vtu_update(e6000sw_softc_t *sc, int purge, int vid, int fid,
 	int i, op;
 	uint32_t data[2];
 
-	if (e6000sw_waitready(sc, VTU_OPERATION, VTU_BUSY)) {
+	if (E6000SW_WAITREADY(sc, VTU_OPERATION, VTU_BUSY)) {
 		device_printf(sc->dev, "VTU unit is busy, cannot access\n");
 		return (EBUSY);
 	}
@@ -1836,7 +1844,7 @@ e6000sw_vtu_update(e6000sw_softc_t *sc, int purge, int vid, int fid,
 		op = VTU_PURGE;
 
 	e6000sw_writereg(sc, REG_GLOBAL, VTU_OPERATION, op | VTU_BUSY);
-	if (e6000sw_waitready(sc, VTU_OPERATION, VTU_BUSY)) {
+	if (E6000SW_WAITREADY(sc, VTU_OPERATION, VTU_BUSY)) {
 		device_printf(sc->dev, "Timeout while flushing VTU\n");
 		return (ETIMEDOUT);
 	}
