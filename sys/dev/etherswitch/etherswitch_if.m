@@ -85,6 +85,36 @@ CODE {
 	{
 
 		return (ENXIO);
+    }
+
+	static ssize_t
+	null_etherswitch_getioblksize(device_t dev)
+	{
+		return (-1);
+	}
+
+	static ssize_t
+	null_etherswitch_getiosize(device_t dev)
+	{
+		return (-1);
+	}
+
+	static void *
+	null_etherswitch_getiobuf(device_t dev)
+	{
+		return (NULL);
+	}
+
+	static int
+	null_etherswitch_ioread(device_t dev, off_t off, ssize_t len)
+	{
+		return (EIO);
+	}
+
+	static int
+	null_etherswitch_iowrite(device_t dev, off_t off, ssize_t len)
+	{
+		return (EIO);
 	}
 };
 
@@ -247,3 +277,42 @@ METHOD int fetch_table_entry {
 	device_t dev;
 	etherswitch_atu_entry_t *entry;
 } DEFAULT null_etherswitch_fetch_entry;
+
+#
+# Get the IO buffer block size
+#
+METHOD ssize_t getioblksize {
+	device_t	dev;
+} DEFAULT null_etherswitch_getioblksize;
+
+#
+# Get the IO buffer size
+#
+METHOD ssize_t getiosize {
+	device_t	dev;
+} DEFAULT null_etherswitch_getiosize;
+
+#
+# Get the IO buffer
+#
+METHOD void * getiobuf {
+	device_t	dev;
+} DEFAULT null_etherswitch_getiobuf;
+
+#
+# Perform a read operation and save data into IO buffer
+#
+METHOD int ioread {
+	device_t	dev;
+	off_t		off;
+	ssize_t		len;
+} DEFAULT null_etherswitch_ioread;
+
+#
+# Perform a write operation (write the data in the IO buffer)
+#
+METHOD int iowrite {
+	device_t	dev;
+	off_t		off;
+	ssize_t		len;
+} DEFAULT null_etherswitch_iowrite;
