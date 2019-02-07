@@ -414,20 +414,35 @@ mvneta_get_mac_address(struct mvneta_softc *sc, uint8_t *addr)
 STATIC boolean_t
 mvneta_has_switch(device_t self)
 {
-	phandle_t node, switch_node, switch_eth, switch_eth_handle;
+	phandle_t node, switch_node, switch_eth, switch_eth_handle, ports, child;
 
 	node = ofw_bus_get_node(self);
-	switch_node =
-	    ofw_bus_find_compatible(OF_finddevice("/"), "marvell,dsa");
+	/* XXX: We need a better way to find out if we are refenced by any
+	 * switches, since I doubt the mv88e6058 is the only one, but I have no
+	 * idea how
+	 */
+	switch_node = ofw_bus_find_compatible(OF_finddevice("/"),
+	    "marvell,mv88e6085");
 	switch_eth = 0;
 
-	OF_getencprop(switch_node, "dsa,ethernet",
-	    (void*)&switch_eth_handle, sizeof(switch_eth_handle));
+	if (switch_node == 0) {
+		return false;
+	}
 
-	if (switch_eth_handle > 0)
-		switch_eth = OF_node_from_xref(switch_eth_handle);
+	ports = ofw_bus_find_child(switch_node, "ports");
 
-	/* Return true if dsa,ethernet cell points to us */
+	for (child = OF_child(ports); child != 0; child = OF_peer(child)) {
+		if (OF_getencprop(child, "ethernet", (void*)&switch_eth_handle,
+		    sizeof(switch_eth_handle)) > 0) {
+			if (switch_eth_handle > 0) {
+				switch_eth = OF_node_from_xref(
+				    switch_eth_handle);
+				break;
+			}
+		}
+	}
+
+	/* Return true if ethernet cell points to us */
 	return (node == switch_eth);
 }
 
@@ -799,6 +814,8 @@ mvneta_attach(device_t self)
 		if_link_state_change(sc->ifp, LINK_STATE_UP);
 
 		if (mvneta_has_switch(self)) {
+			if (bootverbose)
+				device_printf(self, "This device is attached to a switch\n");
 			child = device_add_child(sc->dev, "mdio", -1);
 			if (child == NULL) {
 				ether_ifdetach(sc->ifp);
@@ -807,6 +824,8 @@ mvneta_attach(device_t self)
 			}
 			bus_generic_attach(sc->dev);
 			bus_generic_attach(child);
+		} else if (bootverbose) {
+			device_printf(self, "This device is not attached to a switch\n");
 		}
 
 		/* Configure MAC media */
