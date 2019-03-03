@@ -189,6 +189,7 @@ STATIC void mvneta_clear_mib(struct mvneta_softc *);
 STATIC void mvneta_update_mib(struct mvneta_softc *);
 
 /* Switch */
+STATIC boolean_t mvneta_find_ethernet_prop_switch(phandle_t, phandle_t);
 STATIC boolean_t mvneta_has_switch(device_t);
 
 #define	mvneta_sc_lock(sc) mtx_lock(&sc->mtx)
@@ -412,38 +413,39 @@ mvneta_get_mac_address(struct mvneta_softc *sc, uint8_t *addr)
 }
 
 STATIC boolean_t
-mvneta_has_switch(device_t self)
+mvneta_find_ethernet_prop_switch(phandle_t ethernet, phandle_t node)
 {
-	phandle_t node, switch_node, switch_eth, switch_eth_handle, ports, child;
+	boolean_t ret;
+	phandle_t child, switch_eth_handle, switch_eth;
 
-	node = ofw_bus_get_node(self);
-	/* XXX: We need a better way to find out if we are refenced by any
-	 * switches, since I doubt the mv88e6058 is the only one, but I have no
-	 * idea how
-	 */
-	switch_node = ofw_bus_find_compatible(OF_finddevice("/"),
-	    "marvell,mv88e6085");
-	switch_eth = 0;
-
-	if (switch_node == 0) {
-		return false;
-	}
-
-	ports = ofw_bus_find_child(switch_node, "ports");
-
-	for (child = OF_child(ports); child != 0; child = OF_peer(child)) {
+	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
 		if (OF_getencprop(child, "ethernet", (void*)&switch_eth_handle,
 		    sizeof(switch_eth_handle)) > 0) {
 			if (switch_eth_handle > 0) {
 				switch_eth = OF_node_from_xref(
 				    switch_eth_handle);
-				break;
+
+				if (switch_eth == ethernet)
+					return (true);
 			}
 		}
+
+		ret = mvneta_find_ethernet_prop_switch(ethernet, child);
+		if (ret != 0)
+			return (ret);
 	}
 
-	/* Return true if ethernet cell points to us */
-	return (node == switch_eth);
+	return (false);
+}
+
+STATIC boolean_t
+mvneta_has_switch(device_t self)
+{
+	phandle_t node;
+
+	node = ofw_bus_get_node(self);
+
+	return mvneta_find_ethernet_prop_switch(node, OF_finddevice("/"));
 }
 
 STATIC int
@@ -824,8 +826,6 @@ mvneta_attach(device_t self)
 			}
 			bus_generic_attach(sc->dev);
 			bus_generic_attach(child);
-		} else if (bootverbose) {
-			device_printf(self, "This device is not attached to a switch\n");
 		}
 
 		/* Configure MAC media */
