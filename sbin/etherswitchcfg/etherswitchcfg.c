@@ -359,8 +359,8 @@ set_port_led(struct cfg *cfg, int argc, char *argv[])
 }
 
 
-static void
-set_laggroup_members(struct cfg *cfg, char *argv[])
+static int
+set_laggroup_members(struct cfg *cfg, int argc, char *argv[])
 {
 	etherswitch_laggroup_t lag;
 	int member, untagged;
@@ -396,6 +396,8 @@ set_laggroup_members(struct cfg *cfg, char *argv[])
 	lag.es_untagged_ports = untagged;
 	if (ioctl(cfg->fd, IOETHERSWITCHSETLAGGROUP, &lag) != 0)
 		err(EX_OSERR, "ioctl(IOETHERSWITCHSETLAGGROUP)");
+
+    return (0);
 }
 
 static int
