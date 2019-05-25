@@ -250,7 +250,7 @@ set_port_state(struct cfg *cfg, int argc, char *argv[])
 	if ((cfg->info.es_switch_caps & ETHERSWITCH_CAPS_PSTATE) == 0) {
 		printf("%s: setting the port state is not supported.\n",
 		    cfg->controlfile);
-		return;
+		return (-1);
 	}
 	state = ETHERSWITCH_PSTATE_DISABLED;
 	if (strcasecmp(argv[0], "blocking") == 0)
