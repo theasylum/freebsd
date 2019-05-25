@@ -244,6 +244,9 @@ set_port_state(struct cfg *cfg, int argc, char *argv[])
 	etherswitch_port_t p;
 	uint32_t state;
 
+	if (argc < 1)
+		return (-1);
+
 	if ((cfg->info.es_switch_caps & ETHERSWITCH_CAPS_PSTATE) == 0) {
 		printf("%s: setting the port state is not supported.\n",
 		    cfg->controlfile);
@@ -264,6 +267,8 @@ set_port_state(struct cfg *cfg, int argc, char *argv[])
 	p.es_state = state;
 	if (ioctl(cfg->fd, IOETHERSWITCHSETPORT, &p) != 0)
 		err(EX_OSERR, "ioctl(IOETHERSWITCHSETPORT)");
+
+	return (0);
 }
 
 static int
@@ -366,6 +371,9 @@ set_laggroup_members(struct cfg *cfg, int argc, char *argv[])
 	int member, untagged;
 	char *c, *d;
 	int v;
+
+	if (argc < 2)
+		return (-1);
 
 	member = untagged = 0;
 	memset(&lag, 0, sizeof(lag));
