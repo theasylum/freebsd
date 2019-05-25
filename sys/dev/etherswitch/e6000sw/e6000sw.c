@@ -474,7 +474,7 @@ e6000sw_probe(device_t dev)
 	case MV88E6190:
 		description = "Marvell 88E6190";
 		sc->port_base = 0;
-		sc->port_vlan_mask = 0x7ff;
+		sc->ports_mask = 0x7ff;
 		//sc->num_laggs = 32;	/* Only 16 LAGGs for now. */
 		sc->num_ports = 11;
 		break;
